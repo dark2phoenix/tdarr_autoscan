@@ -41,6 +41,7 @@ The following commands will download the script, and configure the correct permi
 8) Notification Triggers
    - On Import
    - On Upgrade
+   - On Movie File Delete / On Episode File Delete (optional, see below)
 9) Optionally, set any tags
 10) Path: `/config/tdarr_autoscan.sh`
 11) Save
@@ -71,7 +72,29 @@ The following environment variables are required to be set in your container
   - This will be used as input to [sed](https://linux.die.net/man/1/sed)
   - This must be in the format `search|replace`
     - in the above example, only the first occurence of the word `search`, in the file path, will be replaced with the word `replace`
-  - see [this line](https://github.com/hollanbm/tdarr_autoscan/blob/main/tdarr_autoscan.sh#L12) in the script in the script
+  - see `translate_path` in the script
+
+- TDARR_API_KEY
+  - Only needed when Tdarr's API auth is enabled; sent as the `x-api-key` header
+  - Never printed to the script's output
+
+### Replaced and deleted files
+
+Tdarr keeps a record per file path, and scanning a path that no longer exists does not remove it.
+Without cleanup, a file that is queued in Tdarr and then replaced by an upgrade leaves a stale record
+behind, which later fails with `flow source file is not accessible`. If the upgrade keeps the same
+filename, the new file inherits the old record's verdict and is never processed.
+
+- **On Upgrade:** the script removes Tdarr's record for every replaced file (`*_deletedpaths`) before
+  scanning the new one, so a same-name upgrade gets a fresh record.
+- **On File Delete:** the script removes the deleted file's record, unless the delete reason is
+  `Upgrade` (the upgrade event above handles it, in order) or the file is still on disk.
+
+Events with no single file path (`MovieAdded`, Sonarr's Import Complete) are skipped quietly.
+
+### Tests
+
+`bash test/tdarr_autoscan_test.sh` (needs bash and python; uses a fake `curl`, calls nothing real).
 
 ### tdarr_scan.sh
 
