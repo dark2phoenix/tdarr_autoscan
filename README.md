@@ -92,6 +92,9 @@ filename, the new file inherits the old record's verdict and is never processed.
 
 Events with no single file path (`MovieAdded`, Sonarr's Import Complete) are skipped quietly.
 
+Every request retries 4 times, 30 s apart (connection refused, DNS failure and HTTP errors included), so a Tdarr
+restart doesn't silently lose a scan. Both requests are idempotent.
+
 ### Tests
 
 `bash test/tdarr_autoscan_test.sh` (needs bash and python; uses a fake `curl`, calls nothing real).

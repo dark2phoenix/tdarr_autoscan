@@ -23,6 +23,8 @@ cat > "$WORK/bin/curl" <<'FAKE'
 #!/bin/bash
 url="" data=""
 hdrs=()
+printf 'ARGS	%s
+' "$*" >> "$CURL_LOG"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --url) url="$2"; shift 2 ;;
@@ -196,6 +198,20 @@ if grep -q $'^HDR\tx-api-key' "$CURL_LOG"; then fail "no TDARR_API_KEY: no x-api
 run_script radarr_eventtype=Download radarr_moviefile_path="/movies/A/A.mkv" TDARR_API_KEY="k123"
 if [[ "$(grep -c $'^HDR\tx-api-key: k123$' "$CURL_LOG")" == 1 ]]; then ok "TDARR_API_KEY sent as x-api-key"; else fail "TDARR_API_KEY sent as x-api-key" "$(cat "$CURL_LOG")"; fi
 if [[ "$OUT$ERR" == *k123* ]]; then fail "TDARR_API_KEY never printed"; else ok "TDARR_API_KEY never printed"; fi
+
+# --- retries ---------------------------------------------------------------------
+# A Tdarr restart or brief outage must not silently lose a scan (a 2026-09-18
+# timeout left an imported movie with no Tdarr record at all). Every request
+# retries, including connection refused and DNS failure while the container
+# is being recreated, with a bounded per-attempt time.
+run_script radarr_eventtype=Download radarr_isupgrade=True   radarr_moviefile_path="/movies/R/new.mkv" radarr_deletedpaths="/movies/R/old.mkv"
+retry_ok=1
+while IFS= read -r line; do
+  for flag in "--retry 4" "--retry-delay 30" "--retry-all-errors" "--connect-timeout 5" "--max-time 30"; do
+    [[ "$line" == *"$flag"* ]] || { retry_ok=0; fail "every request retries ($flag)" "$line"; }
+  done
+done < <(grep $'^ARGS	' "$CURL_LOG")
+[[ "$(grep -c $'^ARGS	' "$CURL_LOG")" == 2 && "$retry_ok" == 1 ]] && ok "every request carries the retry flags"
 
 echo
 echo "passed: $PASS  failed: $FAIL"

@@ -47,7 +47,12 @@ tdarr_post() {
     auth=(--header "x-api-key: ${TDARR_API_KEY}")
   fi
   echo "PAYLOAD: $2"
+  # Retry through a Tdarr restart/recreate (connection refused, container name
+  # not resolvable, timeouts) so a brief outage doesn't silently lose the scan.
+  # Both requests are idempotent. Worst case ~4.5 min, a fast-failing outage ~2 min.
   curl --silent --show-error --fail --request POST \
+    --connect-timeout 5 --max-time 30 \
+    --retry 4 --retry-delay 30 --retry-all-errors \
     --url "${TDARR_URL}/api/v2/$1" \
     --header 'content-type: application/json' \
     "${auth[@]+"${auth[@]}"}" \
